@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JARVIS // Terminal</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: #050505;
+      color: #d7d7d7;
+      font-family: "Courier New", Courier, monospace;
+    }
+
+    body {
+      padding: 18px;
+    }
+
+    .wrap {
+      width: min(900px, 100%);
+      margin: 0 auto;
+    }
+
+    .window {
+      border: 2px solid #777;
+      background: #111;
+      box-shadow: 6px 6px 0 #000;
+    }
+
+    .titlebar {
+      padding: 7px 10px;
+      border-bottom: 2px solid #777;
+      background: #202020;
+      color: #fff;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .status {
+      padding: 7px 10px;
+      border-bottom: 1px dashed #555;
+      color: #8f8f8f;
+      font-size: 13px;
+    }
+
+    .chat {
+      height: 55vh;
+      min-height: 320px;
+      max-height: 620px;
+      overflow-y: auto;
+      padding: 14px;
+      background:
+        linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+      background-size: 100% 18px;
+    }
+
+    .line {
+      margin: 0 0 12px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .label {
+      font-weight: bold;
+      color: #fff;
+    }
+
+    .you .label { color: #aaa; }
+    .jarvis .label { color: #ddd; }
+
+    .input-area {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding: 10px;
+      border-top: 2px solid #777;
+      background: #171717;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 74px;
+      max-height: 180px;
+      resize: vertical;
+      padding: 10px;
+      border: 1px solid #666;
+      outline: none;
+      background: #080808;
+      color: #eee;
+      font: inherit;
+    }
+
+    textarea:focus {
+      border-color: #aaa;
+    }
+
+    button {
+      align-self: stretch;
+      min-width: 100px;
+      border: 2px outset #999;
+      background: #c0c0c0;
+      color: #111;
+      font: bold 14px "Courier New", monospace;
+      cursor: pointer;
+      padding: 10px;
+    }
+
+    button:active {
+      border-style: inset;
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.6;
+    }
+
+    .footer {
+      padding: 8px 10px;
+      border-top: 1px dashed #555;
+      color: #777;
+      font-size: 12px;
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 8px; }
+
+      .chat {
+        height: 52vh;
+        min-height: 280px;
+      }
+
+      .input-area {
+        grid-template-columns: 1fr;
+      }
+
+      button {
+        min-height: 44px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="window">
+      <div class="titlebar">JARVIS.EXE</div>
+      <div class="status" id="status">STATUS: ONLINE</div>
+
+      <div class="chat" id="chat">
+        <p class="line jarvis">
+          <span class="label">JARVIS&gt;</span> Sistema inicializado. Aguardando comando...
+        </p>
+      </div>
+
+      <div class="input-area">
+        <textarea id="message" placeholder="Digite seu comando..." aria-label="Mensagem"></textarea>
+        <button id="send">ENVIAR</button>
+      </div>
+
+      <div class="footer">
+        n8n interface // modo retrô // responsivo
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // COLOQUE A URL DE PRODUÇÃO DO SEU WEBHOOK AQUI.
+    const N8N_WEBHOOK_URL = "http://localhost:5678/webhook-test/iapersonagememail";
+
+    const chat = document.getElementById("chat");
+    const input = document.getElementById("message");
+    const send = document.getElementById("send");
+    const status = document.getElementById("status");
+
+    function addMessage(label, text, className) {
+      const p = document.createElement("p");
+      p.className = `line ${className}`;
+      p.innerHTML = `<span class="label">${label}&gt;</span> `;
+      p.appendChild(document.createTextNode(text));
+      chat.appendChild(p);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const message = input.value.trim();
+      if (!message) return;
+
+      addMessage("VOCÊ", message, "you");
+      input.value = "";
+      input.focus();
+
+      send.disabled = true;
+      status.textContent = "STATUS: JARVIS PROCESSANDO...";
+
+      try {
+        const response = await fetch(N8N_WEBHOOK_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ message })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // O n8n deve devolver: { "response": "texto da resposta" }
+        const reply = data.response ?? data.output ?? data.text ?? JSON.stringify(data);
+
+        addMessage("JARVIS", reply, "jarvis");
+        status.textContent = "STATUS: ONLINE";
+      } catch (error) {
+        addMessage("ERRO", "Não foi possível falar com o n8n: " + error.message, "jarvis");
+        status.textContent = "STATUS: ERRO DE CONEXÃO";
+      } finally {
+        send.disabled = false;
+      }
+    }
+
+    send.addEventListener("click", sendMessage);
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+  </script>
+</body>
+</html>
